@@ -1,0 +1,8 @@
+{
+  "name": "sannara-ai",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@fal-ai/client": "^1.2.0"
+  }
+}
