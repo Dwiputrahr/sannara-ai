@@ -1,8 +1,21 @@
 {
-  "name": "sannara-ai",
-  "version": "1.0.0",
-  "type": "module",
-  "dependencies": {
-    "@fal-ai/client": "^1.2.0"
-  }
+  "cleanUrls": true,
+  "functions": {
+    "api/generate.js": {
+      "maxDuration": 60
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html",
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8"
+      }
+    }
+  ]
 }
