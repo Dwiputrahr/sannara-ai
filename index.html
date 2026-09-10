@@ -166,11 +166,44 @@
   </main>
 
   <script>
-    const uploadedImages = [];
+   // Fungsi kompresi gambar sebelum dikirim (agar payload Vercel ringan & cepat)
+    function compressImage(file, maxWidth = 1024, maxHeight = 1024, quality = 0.7) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
 
-    // Baca file gambar menjadi DataURL
+            if (width > height) {
+              if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+              }
+            } else {
+              if (height > maxHeight) {
+                width = Math.round((width * maxHeight) / height);
+                height = maxHeight;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+        };
+      });
+    }
+
+    // Event listener upload yang sudah dilengkapi auto-compress
     document.querySelectorAll('.upload-input').forEach(input => {
-      input.addEventListener('change', (e) => {
+      input.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
@@ -179,15 +212,14 @@
         const placeholder = parent.querySelector('.placeholder-ui');
         const deleteBtn = parent.querySelector('.btn-delete');
 
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          img.src = event.target.result;
-          img.classList.remove('hidden');
-          placeholder.classList.add('hidden');
-          deleteBtn.classList.remove('hidden');
-          uploadedImages.push(event.target.result);
-        };
-        reader.readAsDataURL(file);
+        // Kompres gambar otomatis agar di bawah 1MB
+        const compressedBase64 = await compressImage(file);
+
+        img.src = compressedBase64;
+        img.classList.remove('hidden');
+        placeholder.classList.add('hidden');
+        deleteBtn.classList.remove('hidden');
+        uploadedImages.push(compressedBase64);
 
         deleteBtn.onclick = (ev) => {
           ev.preventDefault();
@@ -196,11 +228,13 @@
           img.classList.add('hidden');
           placeholder.classList.remove('hidden');
           deleteBtn.classList.add('hidden');
+          const index = uploadedImages.indexOf(compressedBase64);
+          if (index > -1) uploadedImages.splice(index, 1);
         };
       });
     });
 
-    // Jalankan Request ke Server
+    // Jalankan Request ke Server (Aman dari JSON.parse unexpected character)
     document.getElementById('btnRunAgent').addEventListener('click', async () => {
       if (uploadedImages.length === 0) {
         alert('Silakan unggah minimal 1 foto mentahan produk Sannara terlebih dahulu!');
@@ -215,10 +249,6 @@
       badge.innerText = 'PROCESSING';
       btn.disabled = true;
       btn.classList.add('opacity-50');
-
-      document.getElementById('p1').className = 'flex items-center space-x-2 text-[#8c7355] font-bold';
-      document.getElementById('p2').className = 'flex items-center space-x-2 text-[#8c7355] font-bold';
-      document.getElementById('p3').className = 'flex items-center space-x-2 text-[#8c7355] font-bold';
 
       outputArea.innerHTML = `
         <div class="col-span-2 py-12 flex flex-col items-center justify-center">
@@ -240,7 +270,17 @@
           })
         });
 
-        const data = await response.json();
+        // Tangkap isi teks respon terlebih dahulu sebelum di-parse
+        const textResponse = await response.text();
+
+        let data;
+        try {
+          data = JSON.parse(textResponse);
+        } catch (parseError) {
+          // Jika Vercel mengembalikan HTML (misal error 504 timeout atau 404)
+          console.error("Respon Server (Non-JSON):", textResponse);
+          throw new Error(`Server Vercel mengembalikan status ${response.status}: Silakan cek apakah FAL_KEY sudah diisi di Vercel Settings.`);
+        }
 
         if (data.success && data.images) {
           outputArea.innerHTML = '';
